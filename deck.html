@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>presentation-maker demo deck</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #101b2d;
+      --border: #2a3f5c;
+      --text: #eef2f7;
+      --muted: #9fb0c3;
+      --accent: #ff6a3d;
+      --accent-2: #ffd166;
+      --home: #4da6ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    #stage {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 5vh 6vw;
+      position: relative;
+    }
+
+    .kicker {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: clamp(30px, 4.6vw, 58px);
+      margin: 0 0 .3em 0;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: clamp(15px, 1.5vw, 20px);
+      margin: 0 0 3vh 0;
+    }
+
+    .body {
+      flex: 1;
+      display: flex;
+      gap: 4vw;
+      align-items: center;
+      min-height: 0;
+    }
+
+    .col {
+      flex: 1;
+      min-width: 0;
+    }
+
+    ul.points {
+      font-size: clamp(16px, 1.6vw, 22px);
+      line-height: 1.55;
+      padding-left: 1.1em;
+      margin: 0;
+    }
+
+    ul.points li {
+      margin-bottom: .6em;
+    }
+
+    .media {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+    }
+
+    .media img,
+    .media video {
+      max-width: 100%;
+      max-height: 60vh;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, .4);
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 2vh 2vw;
+      font-size: clamp(15px, 1.4vw, 19px);
+      line-height: 1.5;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 2vh;
+      font-size: 13px;
+      color: var(--muted);
+      position: relative;
+      z-index: 2;
+    }
+
+    .footer .prog {
+      display: flex;
+      gap: 6px;
+    }
+
+    .footer .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #233350;
+    }
+
+    .footer .dot.active {
+      background: var(--accent);
+    }
+
+    .footer .dot.done {
+      background: #3a5a7a;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #5f7391;
+    }
+
+    /* Corner nav arrows — small, translucent triangles; the click target is
+       larger than the visible triangle so they're easy to hit without being
+       visually intrusive. */
+    .nav-arrow {
+      position: fixed;
+      bottom: 2vh;
+      z-index: 40;
+      width: 56px;
+      height: 46px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      opacity: .3;
+      transition: opacity .15s ease;
+    }
+    .nav-arrow:hover, .nav-arrow:focus-visible {
+      opacity: .85;
+    }
+    .nav-arrow:disabled {
+      opacity: .1;
+      cursor: default;
+    }
+    .nav-arrow::before {
+      content: '';
+      display: block;
+      width: 0;
+      height: 0;
+    }
+    .nav-arrow.prev {
+      left: 1.5vw;
+      justify-content: flex-start;
+    }
+    .nav-arrow.prev::before {
+      border-top: 13px solid transparent;
+      border-bottom: 13px solid transparent;
+      border-right: 17px solid var(--text);
+    }
+    .nav-arrow.next {
+      right: 1.5vw;
+      justify-content: flex-end;
+    }
+    .nav-arrow.next::before {
+      border-top: 13px solid transparent;
+      border-bottom: 13px solid transparent;
+      border-left: 17px solid var(--text);
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+    }
+
+    .overlay.active {
+      display: block;
+    }
+
+    .overlay iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+
+    .overlay .close {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      z-index: 51;
+      background: rgba(11, 18, 32, .85);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .slide-frame {
+      flex: 1;
+      min-height: 0;
+      border: 0;
+      width: calc(100% + 12vw);
+      margin: -5vh -6vw 0;
+      background: var(--bg);
+    }
+
+    .bg-photo-slide {
+      position: relative;
+    }
+
+    .bg-photo-slide .bg-photo {
+      position: absolute;
+      top: -5vh;
+      left: -6vw;
+      width: calc(100% + 12vw);
+      height: calc(100% + 10vh);
+      object-fit: cover;
+      z-index: 0;
+    }
+
+    .bg-photo-slide .bg-scrim {
+      position: absolute;
+      top: -5vh;
+      left: -6vw;
+      width: calc(100% + 12vw);
+      height: calc(100% + 10vh);
+      background: linear-gradient(100deg, rgba(11, 18, 32, .88) 0%, rgba(11, 18, 32, .72) 45%, rgba(11, 18, 32, .45) 100%);
+      z-index: 1;
+    }
+
+    .bg-photo-slide>.kicker,
+    .bg-photo-slide>h1,
+    .bg-photo-slide>.sub,
+    .bg-photo-slide>.body {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Rotating background photos — each .bg-photo.slideshow img shows for
+     8s then crossfades to the next, looping. Cycle length = 8s * image
+     count; edit both if the image count on a slide changes. A future
+     markdown compiler (see OSS_PROJECT_PLAN.md in the original project)
+     is meant to generate this per-count CSS automatically. */
+    .bg-photo-slide .bg-photo.slideshow {
+      opacity: 0;
+      animation: bgSlideshowFade 24s infinite;
+    }
+
+    .bg-photo-slide .bg-photo.slideshow:nth-of-type(1) { animation-delay: 0s; }
+    .bg-photo-slide .bg-photo.slideshow:nth-of-type(2) { animation-delay: -8s; }
+    .bg-photo-slide .bg-photo.slideshow:nth-of-type(3) { animation-delay: -16s; }
+
+    @keyframes bgSlideshowFade {
+      0% { opacity: 0; }
+      4% { opacity: 1; }
+      29% { opacity: 1; }
+      33% { opacity: 0; }
+      100% { opacity: 0; }
+    }
+
+    .figure-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .figure-row img {
+      max-height: 26vh;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 4px;
+    }
+
+    ★ {
+      color: var(--accent-2);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="stage"></div>
+
+  <button id="navPrev" class="nav-arrow prev" onclick="go(-1)" aria-label="Previous slide" title="Previous slide (←)"></button>
+  <button id="navNext" class="nav-arrow next" onclick="go(1)" aria-label="Next slide" title="Next slide (→)"></button>
+
+  <div class="overlay" id="genericOverlay">
+    <button class="close" onclick="closeOverlay('genericOverlay')">Close ✕ (Esc)</button>
+    <iframe id="genericOverlayFrame" src=""></iframe>
+  </div>
+  <div class="overlay" id="slideVideoOverlay">
+    <button class="close" onclick="closeSlideVideo()">Close video ✕ (Esc)</button>
+    <video id="slideVideoEl" controls playsinline
+      style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+  </div>
+  <div class="overlay" id="imageLightboxOverlay">
+    <button class="close" onclick="closeImageLightbox()">Close ✕ (Esc)</button>
+    <img id="imageLightboxImg" src="" alt="" style="width:100%; height:100%; object-fit:contain; background:#000;">
+  </div>
+
+  <script>
+    // ─────────────────────────────────────────────────────────────────────────
+    // This is a hand-authored demo deck showing off the engine below. A real
+    // deck would generalize this the same way, or (once it ships) use the
+    // markdown-first compiler described in the original project's
+    // OSS_PROJECT_PLAN.md to generate this array from deck.md + slides/*.md.
+    //
+    // SPEAKER NOTES: each slide's `notes` array is what's pushed to the phone
+    // notes page (notes.html). In the original tool, these are meant to load
+    // from a slides/<dir>/notes.md file per slide at startup (see loadNotes()
+    // below) and fall back to the array here if that fetch fails or is
+    // missing — handy for a single-file demo like this one, where there's
+    // no notes.md to fetch.
+    // ─────────────────────────────────────────────────────────────────────────
+    const SLIDES = [
+      {
+        title: "presentation-maker", budget: "0:20",
+        notes: [
+          "This is the title slide. Speaker notes for it live here, and show up on the phone notes page (open notes.html on a second device).",
+          "LIVE: Press the right arrow (or Space) to advance."
+        ],
+        body: `
+    <div style="text-align:center; margin:auto;">
+      <div class="kicker">Demo deck</div>
+      <h1>presentation-maker</h1>
+      <p class="sub">A portable HTML deck engine with cross-device speaker notes and a live timer.</p>
+    </div>`
+      },
+      {
+        title: "What this engine does", budget: "0:30",
+        notes: [
+          "Second slide: a plain two-column bullets + card layout, the most common slide shape.",
+          "Each slide can set a time budget (shown here as 0:30) that feeds the cumulative timer math on the notes page."
+        ],
+        body: `
+    <div class="kicker">Slide 2</div>
+    <h1>What this engine does</h1>
+    <div class="body">
+      <div class="col">
+        <ul class="points">
+          <li>Single portable <code>deck.html</code> — no build step to view a deck</li>
+          <li>Keyboard navigation (←/→/Space), click nav arrows in the corners</li>
+          <li>Per-slide time budgets, live cumulative timer on the notes page</li>
+          <li>Keystroke-triggered overlays (press <strong>O</strong> on this deck to try one)</li>
+        </ul>
+      </div>
+      <div class="col">
+        <div class="card">Open <code>notes.html</code> on a phone or another tab, on the same
+        network as <code>server.py</code>, to see this slide's notes and the timer sync live.</div>
+      </div>
+    </div>`
+      },
+      {
+        title: "Cycling background photos", budget: "0:25",
+        notes: [
+          "Third slide: pure-CSS crossfading background images, stacked as multiple .bg-photo.slideshow elements.",
+          "Swap in real photos by pointing the <img> src attributes at your own media/ folder."
+        ],
+        body: `
+    <div class="bg-photo-slide" style="position:absolute; inset:0;">
+      <img class="bg-photo slideshow" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='400' height='300' fill='%230891b2'/%3E%3C/svg%3E" alt="Placeholder background 1">
+      <img class="bg-photo slideshow" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='400' height='300' fill='%237c3aed'/%3E%3C/svg%3E" alt="Placeholder background 2">
+      <img class="bg-photo slideshow" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='400' height='300' fill='%23d97706'/%3E%3C/svg%3E" alt="Placeholder background 3">
+      <div class="bg-scrim"></div>
+    </div>
+    <div class="kicker" style="position:relative; z-index:2;">Slide 3</div>
+    <h1 style="position:relative; z-index:2;">Cycling background photos</h1>
+    <p class="sub" style="position:relative; z-index:2;">Three stacked images crossfading on an 8s stagger, pure CSS.</p>
+    <div class="body" style="position:relative; z-index:2;">
+      <div class="col">
+        <div class="card">Replace the three placeholder rectangles above with real
+        <code>&lt;img class="bg-photo slideshow"&gt;</code> elements pointing at your own photos.</div>
+      </div>
+    </div>`
+      },
+      {
+        title: "Overlays and full-screen embeds", budget: "0:25",
+        notes: [
+          "Fourth slide: demonstrates a keystroke-triggered overlay, generalized from the original deck's hardcoded map/gallery keys.",
+          "LIVE: Press O to open the overlay now, then Esc or O again to close it."
+        ],
+        body: `
+    <div class="kicker">Slide 4</div>
+    <h1>Overlays and full-screen embeds</h1>
+    <div class="body">
+      <div class="col">
+        <ul class="points">
+          <li>Declare overlays in the <code>OVERLAYS</code> config below — key, label, and an HTML file to embed</li>
+          <li>Bound globally, available from any slide, no per-slide wiring needed</li>
+          <li>Same pattern works for a field-service map, a video gallery, or any self-contained HTML panel</li>
+        </ul>
+      </div>
+      <div class="col">
+        <div class="card">Press <strong>O</strong> to open the demo overlay (<code>overlay-demo.html</code>).</div>
+      </div>
+    </div>`
+      },
+      {
+        title: "Thanks", budget: "0:10",
+        notes: ["Last slide. Q&A."],
+        body: `
+    <div style="text-align:center; margin:auto;">
+      <h1>Thanks</h1>
+      <p class="sub">Questions?</p>
+    </div>`
+      }
+    ];
+
+    // Keystroke-triggered overlays: generic replacement for the hardcoded
+    // map/gallery keys in the original single-purpose deck. Add entries here
+    // to wire up more overlays; no other code needs to change.
+    const OVERLAYS = [
+      { key: 'o', label: 'Demo overlay', src: 'overlay-demo.html' }
+    ];
+
+    let idx = 0;
+    const stage = document.getElementById('stage');
+
+    // Cumulative plan times from the per-slide budgets (drives the notes page's
+    // "Plan: start → end" display). Change budgets above, and these follow.
+    const toSec = (b) => { const [m, s] = b.split(':').map(Number); return m * 60 + s; };
+    const fmtT = (t) => Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+    const CUM = []; { let acc = 0; for (const s of SLIDES) { CUM.push({ start: acc, end: (acc += toSec(s.budget)) }); } }
+
+    function render() {
+      const s = SLIDES[idx];
+      const dots = SLIDES.map((_, i) => {
+        const cls = i === idx ? 'dot active' : (i < idx ? 'dot done' : 'dot');
+        return `<div class="${cls}"></div>`;
+      }).join('');
+      stage.innerHTML = s.body + `
+    <div class="footer">
+      <div class="prog">${dots}</div>
+      <div>Slide ${idx + 1} of ${SLIDES.length}</div>
+      <div class="hint">← → to navigate · N notes tab</div>
+    </div>`;
+      document.getElementById('navPrev').disabled = idx === 0;
+      document.getElementById('navNext').disabled = idx === SLIDES.length - 1;
+      sync();
+    }
+
+    function sync() {
+      const s = SLIDES[idx];
+      const payload = {
+        index: idx, total: SLIDES.length,
+        slide: {
+          title: s.title, timeBudget: s.budget, notes: s.notes,
+          targetStart: fmtT(CUM[idx].start), targetEnd: fmtT(CUM[idx].end),
+          targetTotal: fmtT(CUM[CUM.length - 1].end)
+        }
+      };
+      fetch('/api/state', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => { });
+    }
+
+    function go(delta) {
+      idx = Math.max(0, Math.min(SLIDES.length - 1, idx + delta));
+      render();
+    }
+
+    function closeOverlay(id) {
+      document.getElementById(id).classList.remove('active');
+      document.getElementById('genericOverlayFrame').src = '';
+    }
+    function toggleOverlay(id, src) {
+      const el = document.getElementById(id);
+      const frame = document.getElementById('genericOverlayFrame');
+      if (el.classList.contains('active')) {
+        closeOverlay(id);
+      } else {
+        frame.src = src;
+        el.classList.add('active');
+      }
+    }
+
+    function playCurrentSlideVideo() {
+      const src = SLIDES[idx] && SLIDES[idx].video;
+      if (!src) return;
+      const v = document.getElementById('slideVideoEl');
+      v.src = src;
+      document.getElementById('slideVideoOverlay').classList.add('active');
+      v.play();
+    }
+    function closeSlideVideo() {
+      document.getElementById('slideVideoOverlay').classList.remove('active');
+      const v = document.getElementById('slideVideoEl');
+      v.pause();
+      v.src = '';
+    }
+
+    function openImageLightbox(src, alt) {
+      const img = document.getElementById('imageLightboxImg');
+      img.src = src;
+      img.alt = alt || '';
+      document.getElementById('imageLightboxOverlay').classList.add('active');
+    }
+    function closeImageLightbox() {
+      document.getElementById('imageLightboxOverlay').classList.remove('active');
+    }
+
+    function handleKey(key) {
+      if (key === 'Escape') {
+        closeOverlay('genericOverlay');
+        closeSlideVideo();
+        closeImageLightbox();
+        return;
+      }
+      if (key === 'ArrowRight' || key === ' ' || key === 'PageDown') { go(1); }
+      if (key === 'ArrowLeft' || key === 'PageUp') { go(-1); }
+      const overlay = OVERLAYS.find((o) => o.key === key.toLowerCase());
+      if (overlay) { toggleOverlay('genericOverlay', overlay.src); }
+      if (key.toLowerCase() === 'v') { playCurrentSlideVideo(); }
+      if (key.toLowerCase() === 'n') { window.open('notes.html', 'deckNotes'); }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (['ArrowRight', ' ', 'PageDown', 'ArrowLeft', 'PageUp'].includes(e.key)) e.preventDefault();
+      handleKey(e.key);
+    });
+
+    // Navigation keys/clicks forwarded from an embedded slide iframe (e.g. an
+    // overlay or a standalone HTML slide) so arrows and the corner nav arrows
+    // still work when the iframe has focus.
+    window.addEventListener('message', (e) => {
+      if (!e.data) return;
+      if (e.data.type === 'deck-key') handleKey(e.data.key);
+      if (e.data.type === 'deck-click') go(e.data.dir);
+    });
+
+    // ── Load speaker notes from slides/<dir>/notes.md, if present ────────────
+    // Each paragraph (blank-line separated) becomes one note entry on the phone
+    // notes page. Markdown handled: '#' heading lines are skipped, **bold** and
+    // *italic* are converted, and lines starting with "LIVE:" keep that prefix
+    // so the notes page styles them as an on-stage cue. This demo deck has no
+    // slides/ folder, so every slide falls back to its inline `notes` array.
+    function parseNotes(md) {
+      const paras = [];
+      let cur = [];
+      const flush = () => { if (cur.length) { paras.push(cur.join(' ')); cur = []; } };
+      for (const raw of md.split('\n')) {
+        const line = raw.trim();
+        if (line.startsWith('#')) { flush(); continue; }   // heading = human context only
+        if (line === '') { flush(); continue; }
+        if (line.startsWith('LIVE:')) { flush(); paras.push(line); continue; } // own entry
+        cur.push(line);
+      }
+      flush();
+      return paras.map(p => p
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      );
+    }
+
+    async function loadNotes() {
+      await Promise.all(SLIDES.map(async (s) => {
+        if (!s.dir) return;
+        try {
+          const res = await fetch('slides/' + s.dir + '/notes.md', { cache: 'no-store' });
+          if (!res.ok) return;                       // no notes.md -> keep fallback
+          const notes = parseNotes(await res.text());
+          if (notes.length) s.notes = notes;
+        } catch (e) { /* file:// or offline -> keep fallback */ }
+      }));
+      sync(); // push freshly loaded notes for the current slide to the phone
+    }
+
+    render();
+    loadNotes();
+    setInterval(sync, 4000); // keep the notes device in sync even without slide changes
+  </script>
+</body>
+
+</html>

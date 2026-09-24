@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speaker Notes (private)</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#101b2d; --border:#2a3f5c;
+    --text:#eef2f7; --muted:#9fb0c3; --accent:#ff6a3d;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  .wrap{ display:flex; flex-direction:column; height:100%; padding:16px 18px; }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:8px;
+  }
+  .private{
+    font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:#ffd166; background:rgba(255,209,102,.12);
+    border:1px solid rgba(255,209,102,.35);
+    padding:3px 8px; border-radius:999px;
+  }
+  .clock{
+    font-variant-numeric:tabular-nums;
+    font-size:14px; color:var(--muted);
+  }
+  .timerbar{
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:10px;
+  }
+  .timer{
+    font-variant-numeric:tabular-nums;
+    font-size:24px; font-weight:700; color:var(--text);
+    background:var(--card); border:1px solid var(--border);
+    padding:6px 12px; border-radius:8px;
+  }
+  .timer.running{ border-color:#54c47f; }
+  .timer.paused{ border-color:#ffd166; }
+  .plansofar{
+    font-size:12px; color:var(--muted); line-height:1.4;
+    font-variant-numeric:tabular-nums;
+  }
+  .plansofar strong{ color:var(--text); font-size:15px; }
+  .plansofar .ahead{ color:#54c47f; }
+  .plansofar .behind{ color:#ff8a5c; }
+  .controls{ display:flex; gap:8px; margin-left:auto; }
+  .controls button{
+    font-size:13px; font-weight:700; cursor:pointer;
+    color:var(--text); background:var(--card);
+    border:1px solid var(--border); border-radius:8px;
+    padding:8px 14px;
+  }
+  .controls button#startPauseBtn.start{ border-color:#54c47f; color:#9fe6b8; }
+  .controls button#startPauseBtn.pause{ border-color:#ffd166; color:#ffd166; }
+  .controls button#resetBtn{ color:var(--muted); }
+  .progress{
+    font-size:12px; color:var(--muted); margin-bottom:12px;
+  }
+  h1{
+    font-size:18px; margin:0 0 2px 0;
+  }
+  .budget{
+    font-size:12px; color:var(--accent); margin-bottom:14px; font-weight:600;
+    font-variant-numeric:tabular-nums;
+  }
+  .notes{
+    flex:1; overflow-y:auto;
+    background:var(--card); border:1px solid var(--border);
+    border-radius:10px; padding:14px 16px;
+  }
+  .notes p{
+    font-size:14.5px; line-height:1.55; margin:0 0 12px 0;
+  }
+  .notes p.live{
+    color:#9fe6b8; font-style:italic; font-size:13px;
+    border-top:1px dashed var(--border); padding-top:10px; margin-top:14px;
+  }
+  .status{
+    margin-top:10px; font-size:11px; color:var(--muted); text-align:center;
+  }
+  .dot{
+    display:inline-block; width:7px; height:7px; border-radius:50%;
+    background:#54c47f; margin-right:5px;
+    box-shadow:0 0 6px #54c47f;
+  }
+  .dot.off{ background:#c45454; box-shadow:0 0 6px #c45454; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="private">Private — not shared</span>
+    <span class="clock" id="clock">—:—:—</span>
+  </div>
+  <div class="timerbar">
+    <span class="timer" id="timer">00:00</span>
+    <span class="plansofar" id="plansofar"></span>
+    <span class="controls">
+      <button id="startPauseBtn" class="start" type="button">Start</button>
+      <button id="resetBtn" type="button">Reset</button>
+    </span>
+  </div>
+  <div class="progress" id="progress">Slide — of —</div>
+  <h1 id="title">Waiting for presentation window…</h1>
+  <div class="budget" id="budget"></div>
+  <div class="notes" id="notes"></div>
+  <div class="status" id="status"><span class="dot off"></span>Connecting…</div>
+</div>
+
+<script>
+  // This page polls the tiny local server (server.py) instead of relying on
+  // window.opener/postMessage, so it works even when opened on a completely
+  // separate device (phone/tablet) from the one running deck.html — that's
+  // the point: keep notes off the screen you're sharing, entirely.
+  //
+  // The presentation timer is controlled HERE (Start/Pause/Reset) and stored
+  // on the server, so it survives page reloads and stays consistent if the
+  // notes are open on more than one device.
+  const $ = (id) => document.getElementById(id);
+  let connected = false;
+  let timer = { running:false, startEpoch:null, accumulatedMs:0 };
+  let targetEndSec = null;   // planned cumulative END of current slide, seconds
+
+  function fmt(ms){
+    const s = Math.max(0, Math.floor(ms/1000));
+    const m = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    return m + ':' + ss;
+  }
+  function toSec(t){ if(!t) return null; const [m,s] = t.split(':').map(Number); return m*60 + s; }
+
+  function elapsedMs(){
+    return timer.accumulatedMs + (timer.running && timer.startEpoch ? Date.now() - timer.startEpoch : 0);
+  }
+
+  function postTimer(){
+    fetch('/api/state', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ timer })
+    }).catch(()=>{});
+  }
+
+  function updateControls(){
+    const btn = $('startPauseBtn');
+    if (timer.running){ btn.textContent = 'Pause'; btn.className = 'pause'; }
+    else if (elapsedMs() > 0){ btn.textContent = 'Resume'; btn.className = 'start'; }
+    else { btn.textContent = 'Start'; btn.className = 'start'; }
+    $('timer').className = 'timer ' + (timer.running ? 'running' : (elapsedMs() > 0 ? 'paused' : ''));
+  }
+
+  $('startPauseBtn').addEventListener('click', () => {
+    if (timer.running){
+      timer.accumulatedMs += Date.now() - timer.startEpoch;
+      timer.startEpoch = null;
+      timer.running = false;
+    } else {
+      timer.startEpoch = Date.now();
+      timer.running = true;
+    }
+    updateControls();
+    postTimer();
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    if (!confirm('Reset the presentation timer to 00:00? This cannot be undone.')) return;
+    timer = { running:false, startEpoch:null, accumulatedMs:0 };
+    updateControls();
+    postTimer();
+  });
+
+  function setConnected(ok){
+    if (ok === connected) return;
+    connected = ok;
+    $('status').innerHTML = ok
+      ? '<span class="dot"></span>Synced to presentation'
+      : '<span class="dot off"></span>Lost connection — retrying…';
+  }
+
+  async function poll(){
+    try {
+      const res = await fetch('/api/state', {cache:'no-store'});
+      if (!res.ok) throw new Error('bad status');
+      const data = await res.json();
+      setConnected(true);
+      if (data.timer) timer = data.timer;
+      if (data.total){
+        $('progress').textContent = 'Slide ' + (data.index + 1) + ' of ' + data.total;
+      }
+      if (data.slide){
+        $('title').textContent = data.slide.title || '';
+        let b = data.slide.timeBudget ? ('This slide: ' + data.slide.timeBudget) : '';
+        if (data.slide.targetStart){
+          b += (b ? ' · ' : '') + 'Plan: ' + data.slide.targetStart + ' → ' + data.slide.targetEnd;
+          if (data.slide.targetTotal) b += ' · Total: ' + data.slide.targetTotal;
+        }
+        $('budget').textContent = b;
+        targetEndSec = toSec(data.slide.targetEnd);
+        $('notes').innerHTML = (data.slide.notes || []).map((p) => {
+          const isLive = p.startsWith('LIVE:');
+          return '<p class="' + (isLive ? 'live' : '') + '">' + (isLive ? p.slice(5).trim() : p) + '</p>';
+        }).join('');
+      }
+      updateControls();
+    } catch (e) {
+      setConnected(false);
+    }
+  }
+
+  setInterval(() => {
+    // Wall clock
+    $('clock').textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    // Elapsed presentation time
+    const el = elapsedMs();
+    $('timer').textContent = fmt(el);
+    // Cumulative plan: where you should be by the END of the current slide,
+    // and how far ahead (-) / behind (+) you are against that mark.
+    if (targetEndSec != null && el > 0){
+      const diff = Math.round(el/1000) - targetEndSec;
+      const cls = diff > 0 ? 'behind' : 'ahead';
+      const sign = diff > 0 ? '+' : '−';
+      $('plansofar').innerHTML =
+        'should end by <strong>' + fmt(targetEndSec*1000) + '</strong><br>' +
+        '<span class="' + cls + '">' + sign + fmt(Math.abs(diff)*1000) + ' vs plan</span>';
+    } else if (targetEndSec != null){
+      $('plansofar').innerHTML = 'slide ends by <strong>' + fmt(targetEndSec*1000) + '</strong>';
+    }
+  }, 250);
+
+  poll();
+  setInterval(poll, 700);
+</script>
+</body>
+</html>
