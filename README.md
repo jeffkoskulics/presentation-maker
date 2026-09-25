@@ -76,4 +76,4 @@ Planned next, not yet built:
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [LICENSE](LICENSE).
